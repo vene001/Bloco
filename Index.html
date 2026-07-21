@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeNotes - Bloco de Notas</title>
+    <style>
+        /* --- ESTILOS GERAIS --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- BARRA LATERAL (SIDEBAR) --- */
+        #sidebar {
+            width: 280px;
+            background-color: #1e1e1e;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+        }
+
+        #sidebar h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #4da6ff;
+            text-align: center;
+        }
+
+        .btn-new {
+            background-color: #4da6ff;
+            color: #121212;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 15px;
+            transition: background 0.2s;
+        }
+
+        .btn-new:hover {
+            background-color: #3385ff;
+        }
+
+        #notes-list {
+            list-style: none;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .note-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            background-color: #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .note-item:hover, .note-item.active {
+            background-color: #3a3a3a;
+        }
+
+        .note-item span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        .btn-delete {
+            background: none;
+            border: none;
+            color: #ff5555;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            padding: 2px 6px;
+        }
+
+        .btn-delete:hover {
+            color: #ff2222;
+        }
+
+        /* --- ÁREA PRINCIPAL DO EDITOR --- */
+        #main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            background-color: #121212;
+        }
+
+        #note-title {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid #333;
+            color: #ffffff;
+            font-size: 1.5rem;
+            font-weight: bold;
+            padding: 8px 0;
+            margin-bottom: 15px;
+            outline: none;
+        }
+
+        #note-title:focus {
+            border-bottom-color: #4da6ff;
+        }
+
+        #note-body {
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            color: #dcdcdc;
+            font-size: 1rem;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+        }
+
+        .empty-state {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #666;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- BARRA LATERAL -->
+    <div id="sidebar">
+        <h2>FreeNotes</h2>
+        <button class="btn-new" id="btn-add">+ Nova Nota</button>
+        <ul id="notes-list"></ul>
+    </div>
+
+    <!-- ÁREA DO EDITOR -->
+    <div id="main-content">
+        <input type="text" id="note-title" placeholder="Título da nota..." style="display: none;">
+        <textarea id="note-body" placeholder="Comece a digitar aqui..." style="display: none;"></textarea>
+        <div id="empty-message" class="empty-state">Selecione ou crie uma nota para começar.</div>
+    </div>
+
+    <!-- LÓGICA EM JAVASCRIPT -->
+    <script>
+        // --- ESTADO DA APLICAÇÃO ---
+        let notes = JSON.parse(localStorage.getItem('freenotes_data')) || [];
+        let activeNoteId = null;
+
+        // --- ELEMENTOS DO DOM ---
+        const notesList = document.getElementById('notes-list');
+        const btnAdd = document.getElementById('btn-add');
+        const noteTitleInput = document.getElementById('note-title');
+        const noteBodyInput = document.getElementById('note-body');
+        const emptyMessage = document.getElementById('empty-message');
+
+        // --- FUNÇÕES ---
+
+        // Salva as notas no LocalStorage
+        function saveToStorage() {
+            localStorage.setItem('freenotes_data', JSON.stringify(notes));
+        }
+
+        // Renderiza a lista de notas na barra lateral
+        function renderNotesList() {
+            notesList.innerHTML = '';
+
+            notes.forEach(note => {
+                const li = document.createElement('li');
+                li.className = `note-item ${note.id === activeNoteId ? 'active' : ''}`;
+                
+                const span = document.createElement('span');
+                span.textContent = note.title || 'Sem título';
+                span.onclick = () => selectNote(note.id);
+
+                const btnDelete = document.createElement('button');
+                btnDelete.className = 'btn-delete';
+                btnDelete.textContent = '✕';
+                btnDelete.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteNote(note.id);
+                };
+
+                li.appendChild(span);
+                li.appendChild(btnDelete);
+                notesList.appendChild(li);
+            });
+        }
+
+        // Cria uma nova nota
+        function createNote() {
+            const newNote = {
+                id: Date.now(),
+                title: 'Nova Nota',
+                body: ''
+            };
+
+            notes.unshift(newNote);
+            saveToStorage();
+            selectNote(newNote.id);
+        }
+
+        // Seleciona uma nota para exibição e edição
+        function selectNote(id) {
+            activeNoteId = id;
+            const note = notes.find(n => n.id === id);
+
+            if (note) {
+                noteTitleInput.style.display = 'block';
+                noteBodyInput.style.display = 'block';
+                emptyMessage.style.display = 'none';
+
+                noteTitleInput.value = note.title;
+                noteBodyInput.value = note.body;
+            } else {
+                noteTitleInput.style.display = 'none';
+                noteBodyInput.style.display = 'none';
+                emptyMessage.style.display = 'flex';
+            }
+
+            renderNotesList();
+        }
+
+        // Deleta uma nota
+        function deleteNote(id) {
+            notes = notes.filter(n => n.id !== id);
+            saveToStorage();
+
+            if (activeNoteId === id) {
+                activeNoteId = notes.length > 0 ? notes[0].id : null;
+            }
+
+            if (activeNoteId) {
+                selectNote(activeNoteId);
+            } else {
+                selectNote(null);
+            }
+        }
+
+        // Atualiza os dados da nota ativa conforme o usuário digita
+        function updateActiveNote() {
+            if (!activeNoteId) return;
+
+            const note = notes.find(n => n.id === activeNoteId);
+            if (note) {
+                note.title = noteTitleInput.value;
+                note.body = noteBodyInput.value;
+                saveToStorage();
+                renderNotesList();
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        btnAdd.addEventListener('click', createNote);
+        noteTitleInput.addEventListener('input', updateActiveNote);
+        noteBodyInput.addEventListener('input', updateActiveNote);
+
+        // --- INICIALIZAÇÃO ---
+        if (notes.length > 0) {
+            selectNote(notes[0].id);
+        } else {
+            renderNotesList();
+        }
+    </script>
+</body>
+</html>
